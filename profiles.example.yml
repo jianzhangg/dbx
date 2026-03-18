@@ -1,0 +1,16 @@
+profiles:
+  prod_mysql:
+    kind: mysql
+    host: 127.0.0.1
+    port: 3306
+    user: readonly
+    password: secret
+    database: app
+    readonly: true
+    timeout: 30
+
+  cache_redis:
+    kind: redis
+    url: redis://default:secret@127.0.0.1:6379/0
+    readonly: true
+    timeout: 30
