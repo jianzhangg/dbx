@@ -31,8 +31,11 @@ dbx --help
 默认配置路径：
 
 ```bash
-~/.config/dbx/profiles.yml
+macOS / Linux: ~/.config/dbx/profiles.yml
+Windows: %APPDATA%\dbx\profiles.yml
 ```
+
+首次运行 `dbx config` 时，如果这个文件不存在，`dbx` 会自动创建目录并把模板写进去。
 
 也支持覆盖：
 - `DBX_CONFIG=/absolute/path/to/profiles.yml`
@@ -67,12 +70,19 @@ profiles:
 ## 命令
 
 ```bash
+dbx config
 dbx profile list
 dbx profile show prod_mysql
 dbx ping prod_mysql
 dbx sql prod_mysql "select now()"
 dbx redis cache_redis GET session:1
 ```
+
+`dbx config` 会返回：
+- `configPath`: 当前使用的配置文件路径
+- `created`: 本次是否刚创建了配置文件
+- `templatePath`: 当前包内模板路径
+- `howToConfigure`: 修改配置文件的简短说明
 
 常见返回：
 
@@ -100,6 +110,11 @@ dbx redis cache_redis GET session:1
   }
 }
 ```
+
+失败返回固定包含：
+- `error.code`: 稳定的错误类别
+- `error.message`: 可直接展示或记录的具体失败信息
+- `error.details`: 可选的结构化补充信息，当前主要用于配置/schema 校验错误
 
 退出码：
 - `0` 成功

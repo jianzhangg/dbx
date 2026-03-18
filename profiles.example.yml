@@ -1,3 +1,6 @@
+# Let `dbx config` create this file for you, then replace the placeholder values.
+# Then replace the placeholder host/user/password/url values with your real endpoints.
+# timeout is in seconds.
 profiles:
   prod_mysql:
     kind: mysql

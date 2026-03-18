@@ -1,3 +1,5 @@
+import os from "node:os";
+import path from "node:path";
 import { DbxError, ExitCode } from "./errors.js";
 
 export async function withTimeout<T>(
@@ -49,13 +51,13 @@ export async function withTimeout<T>(
 
 export function expandPath(filePath: string, cwd = process.cwd()): string {
   if (filePath === "~") {
-    return process.env.HOME ?? cwd;
+    return os.homedir() || cwd;
   }
-  if (filePath.startsWith("~/")) {
-    return `${process.env.HOME ?? cwd}/${filePath.slice(2)}`;
+  if (filePath.startsWith("~/") || filePath.startsWith("~\\")) {
+    return path.join(os.homedir() || cwd, filePath.slice(2));
   }
-  if (filePath.startsWith("/")) {
+  if (path.isAbsolute(filePath)) {
     return filePath;
   }
-  return new URL(filePath, `file://${cwd.endsWith("/") ? cwd : `${cwd}/`}`).pathname;
+  return path.resolve(cwd, filePath);
 }

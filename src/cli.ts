@@ -1,5 +1,11 @@
 import { Command, CommanderError } from "commander";
-import { getProfile, loadConfig, redactProfile, summarizeProfiles } from "./config.js";
+import {
+  ensureConfigFile,
+  getProfile,
+  loadConfig,
+  redactProfile,
+  summarizeProfiles
+} from "./config.js";
 import type { Profile } from "./config.js";
 import { DbxError, ExitCode, toDbxError } from "./errors.js";
 import { runSql, pingMysql } from "./mysql.js";
@@ -39,6 +45,29 @@ function loadProfileFromCommand(command: Command, profileName: string): { profil
     profile: getProfile(config, profileName),
     configPath: path
   };
+}
+
+function createConfigCommand(program: Command): void {
+  program
+    .command("config")
+    .description("Show or initialize the profiles.yml file")
+    .action(async function action(this: Command) {
+      await withCliResult(async () => {
+        const options = this.optsWithGlobals<GlobalOptions>();
+        const configFile = ensureConfigFile(options.config);
+        return {
+          configPath: configFile.path,
+          created: configFile.created,
+          templatePath: configFile.templatePath,
+          howToConfigure: [
+            "Open the config file and replace the placeholder connection values.",
+            "Use kind=mysql or kind=redis for each profile.",
+            "Set readonly to true or false for each profile.",
+            "Set timeout to the number of seconds before dbx disconnects."
+          ]
+        };
+      });
+    });
 }
 
 function createProfileCommands(program: Command): void {
@@ -156,6 +185,7 @@ export function createProgram(): Command {
     .description("Unified MySQL and Redis CLI")
     .option("-c, --config <path>", "Path to profiles.yml");
 
+  createConfigCommand(program);
   createProfileCommands(program);
   createPingCommand(program);
   createSqlCommand(program);
