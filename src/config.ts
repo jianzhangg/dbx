@@ -16,7 +16,7 @@ const FALLBACK_TEMPLATE = `# This file is created automatically by \`dbx config\
 #   readonly: true or false
 #   timeout: timeout in seconds
 profiles:
-  prod_mysql:
+  prod_mysql_ro:
     kind: mysql
     host: 127.0.0.1
     port: 3306
@@ -26,10 +26,26 @@ profiles:
     readonly: true
     timeout: 30
 
-  cache_redis:
+  prod_mysql_rw:
+    kind: mysql
+    host: 127.0.0.1
+    port: 3306
+    user: app_user
+    password: secret
+    database: app
+    readonly: false
+    timeout: 30
+
+  cache_redis_ro:
     kind: redis
     url: redis://default:secret@127.0.0.1:6379/0
     readonly: true
+    timeout: 30
+
+  cache_redis_rw:
+    kind: redis
+    url: redis://default:secret@127.0.0.1:6379/0
+    readonly: false
     timeout: 30
 `;
 

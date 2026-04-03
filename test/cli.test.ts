@@ -56,6 +56,11 @@ test("config command creates a missing config file from the template", async () 
   assert.equal(parsed.data.created, true);
   assert.equal(Array.isArray(parsed.data.howToConfigure), true);
   assert.equal(fs.existsSync(configPath), true);
+  const contents = fs.readFileSync(configPath, "utf8");
+  assert.match(contents, /prod_mysql_ro:/);
+  assert.match(contents, /prod_mysql_rw:/);
+  assert.match(contents, /cache_redis_ro:/);
+  assert.match(contents, /cache_redis_rw:/);
 });
 
 test("config command shows an existing config path without overwriting it", async () => {
@@ -219,5 +224,8 @@ test("profile list auto-creates the config file when it is missing", async () =>
   assert.equal(parsed.ok, true);
   assert.equal(parsed.data.configPath, configPath);
   assert.equal(fs.existsSync(configPath), true);
-  assert.equal(parsed.data.profiles.length > 0, true);
+  assert.deepEqual(
+    parsed.data.profiles.map((profile: { name: string }) => profile.name),
+    ["prod_mysql_ro", "prod_mysql_rw", "cache_redis_ro", "cache_redis_rw"]
+  );
 });

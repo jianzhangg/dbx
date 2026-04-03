@@ -29,6 +29,8 @@ dbx --help
 dbx config
 ```
 
+这一步通常只需要做一次。后面只要配置文件还在，就直接运行 `dbx profile list`、`dbx ping`、`dbx sql`、`dbx redis`。
+
 默认配置路径：
 
 ```bash
@@ -110,6 +112,40 @@ profiles:
 - `timeout`: 秒级超时，默认 `30`
 
 如果只想从只读 profile 开始，先只配 `*_ro` 即可。
+
+## Docker 本地联调
+
+仓库里现在提供了一套可重复使用的本地联调环境：
+
+- [docker-compose.yml](/path/to/dbx/docker-compose.yml)
+- [scripts/docker-smoke-test.sh](/path/to/dbx/scripts/docker-smoke-test.sh)
+
+如果你的环境带 `docker compose` 或 `docker-compose`，可以直接起服务：
+
+```bash
+docker compose up -d
+```
+
+运行一键冒烟：
+
+```bash
+npm run test:docker
+```
+
+这会自动完成：
+
+- 启动 MySQL 和 Redis
+- 生成临时 `profiles.yml`
+- 覆盖 `config / profile list / profile show / ping / sql / redis`
+- 验证 MySQL 和 Redis 的只读拦截
+
+如果你想保留容器不自动清理：
+
+```bash
+KEEP_SERVICES=1 npm run test:docker
+```
+
+这套脚本优先使用 Docker Compose；如果当前机器没有 Compose，也会自动回退到 `docker run`。
 
 ## 命令怎么用
 
