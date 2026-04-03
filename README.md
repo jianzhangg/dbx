@@ -19,7 +19,7 @@ npm run build
 node dist/index.js --help
 ```
 
-如果后续发布到 npm：
+如果从 npm 安装：
 
 ```bash
 npm install -g dbx-cli
