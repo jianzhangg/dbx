@@ -9,9 +9,9 @@
 - `dbx sql <profile> "<sql>"`
 - `dbx redis <profile> <command> [args...]`
 
-这个工具适合给人直接用，也适合给 Codex 调用。它默认输出 JSON，并内置两类保护：
+默认输出 JSON，并内置两类保护：
 
-- `readonly`: 限制只读 profile 不能写库
+- `readonly`: 只读 profile 下阻止写操作
 - `timeout`: 超时自动断开，避免命令挂住
 
 ## 5 分钟上手
@@ -23,28 +23,15 @@ npm install -g dbx-cli
 dbx --help
 ```
 
-2. 如果你要给 Codex 用，把 skill 安装到 Codex 全局目录。
-
-以默认全局目录 `~/.codex/skills` 为例：
-
-```bash
-mkdir -p ~/.codex/skills
-cp -R "$(npm root -g)/dbx-cli/skills/dbx" ~/.codex/skills/dbx
-```
-
-如果你用的是自定义 `CODEX_HOME`，把目标目录换成 `$CODEX_HOME/skills/dbx` 即可。
-
-3. 初始化配置文件：
+2. 初始化配置文件：
 
 ```bash
 dbx config
 ```
 
-这一步通常只需要做一次。后面只要配置文件还在，就直接运行 `dbx profile list`、`dbx ping`、`dbx sql`、`dbx redis`。
-
 默认配置路径：
 
-```bash
+```text
 macOS / Linux: ~/.config/dbx/profiles.yml
 Windows: %APPDATA%\dbx\profiles.yml
 ```
@@ -56,30 +43,7 @@ DBX_CONFIG=/absolute/path/to/profiles.yml dbx profile list
 dbx --config /absolute/path/to/profiles.yml profile list
 ```
 
-先看有哪些 profile：
-
-```bash
-dbx profile list
-dbx profile show prod_mysql_ro
-```
-
-连通性检查：
-
-```bash
-dbx ping prod_mysql_ro
-dbx ping cache_redis_ro
-```
-
-开始查询：
-
-```bash
-dbx sql prod_mysql_ro "select now() as now_time"
-dbx redis cache_redis_ro GET session:1
-```
-
-## 配置文件怎么写
-
-推荐把只读和可写 profile 分开，不要混用：
+3. 按下面的格式写 profile：
 
 ```yaml
 profiles:
@@ -116,49 +80,48 @@ profiles:
     timeout: 30
 ```
 
+4. 验证连接并开始查询：
+
+```bash
+dbx profile list
+dbx ping prod_mysql_ro
+dbx sql prod_mysql_ro "select now() as now_time"
+dbx redis cache_redis_ro GET session:1
+```
+
+## 给 Codex 用
+
+如果你希望 Codex 能直接调用 `dbx`，把仓库自带的 skill 安装到 Codex 的全局 skills 目录即可。
+
+以默认目录 `~/.codex/skills` 为例：
+
+```bash
+mkdir -p ~/.codex/skills
+cp -R "$(npm root -g)/dbx-cli/skills/dbx" ~/.codex/skills/dbx
+```
+
+如果你使用自定义 `CODEX_HOME`，目标目录就是 `$CODEX_HOME/skills/dbx`。
+
+装好以后，可以直接这样说：
+
+- `使用 $dbx 列出当前可用的 profile`
+- `使用 $dbx ping mysql_test`
+- `使用 $dbx 查看 redis_test 里某个 key 的 TTL`
+- `使用 $dbx 查 prod_mysql_ro 最近 10 条订单`
+
+## 配置说明
+
+建议把只读和可写 profile 分开，不要混用。
+
 字段说明：
 
 - `kind`: `mysql` 或 `redis`
 - `readonly`: `true` 表示启用只读保护，`false` 表示允许写
 - `timeout`: 秒级超时，默认 `30`
 
-如果只想从只读 profile 开始，先只配 `*_ro` 即可。
+如果你只想从安全用法开始，先只配置 `*_ro` 即可。
 
-## Docker 本地联调
-
-仓库里现在提供了一套可重复使用的本地联调环境：
-
-- `docker-compose.yml`
-- `scripts/docker-smoke-test.sh`
-
-如果你的环境带 `docker compose` 或 `docker-compose`，可以直接起服务：
-
-```bash
-docker compose up -d
-```
-
-运行一键冒烟：
-
-```bash
-npm run test:docker
-```
-
-这会自动完成：
-
-- 启动 MySQL 和 Redis
-- 生成临时 `profiles.yml`
-- 覆盖 `config / profile list / profile show / ping / sql / redis`
-- 验证 MySQL 和 Redis 的只读拦截
-
-如果你想保留容器不自动清理：
-
-```bash
-KEEP_SERVICES=1 npm run test:docker
-```
-
-这套脚本优先使用 Docker Compose；如果当前机器没有 Compose，也会自动回退到 `docker run`。
-
-## 命令怎么用
+## 命令参考
 
 ### `dbx config`
 
@@ -213,7 +176,7 @@ dbx redis cache_redis_ro MGET session:1 session:2
 dbx redis cache_redis_rw SET feature:flag on
 ```
 
-## 输出长什么样
+## 输出与错误码
 
 所有结果默认输出 JSON。
 
@@ -271,7 +234,7 @@ dbx redis cache_redis_rw SET feature:flag on
 MySQL：
 
 - `readonly: true` 时只允许 `SELECT`、`SHOW`、`DESC`、`DESCRIBE`、`EXPLAIN`、`WITH`
-- 只允许一条 SQL
+- 每次只允许一条 SQL
 - 执行时会包在 `START TRANSACTION READ ONLY` 中
 
 Redis：
@@ -284,35 +247,4 @@ Redis：
 
 - 日常排查默认使用 `*_ro`
 - 真要写入时显式切到 `*_rw`
-- 不要把“读写混合”的权限放在同一个 profile 里
-
-## 给 Codex 用
-
-如果你希望 Codex 能直接调用 `dbx`，除了安装 npm 包，还需要把这个 skill 放进 Codex 的 skills 目录。
-
-以 Codex 默认全局目录 `~/.codex/skills` 为例：
-
-```bash
-mkdir -p ~/.codex/skills
-cp -R "$(npm root -g)/dbx-cli/skills/dbx" ~/.codex/skills/dbx
-```
-
-如果你使用自定义 `CODEX_HOME`，对应目录就是：
-
-```bash
-$CODEX_HOME/skills/dbx
-```
-
-装好以后，可以在 Codex 里直接这样说：
-
-- `使用 $dbx 列出当前可用的 profile`
-- `使用 $dbx ping mysql_test`
-- `使用 $dbx 查看 redis_test 里某个 key 的 TTL`
-- `使用 $dbx 查 prod_mysql_ro 最近 10 条订单`
-
-这个 skill 默认会引导 Codex：
-
-- 已知 profile 和目标时直接执行 `dbx`
-- 只有在 profile 不明确或连通性可疑时才补 `profile list`、`profile show`、`ping`
-- 按场景选择 `dbx sql` 或 `dbx redis`
-- 遇到 `READONLY_BLOCKED` 直接停止，不尝试绕过
+- 不要把读写权限混在同一个 profile 里
