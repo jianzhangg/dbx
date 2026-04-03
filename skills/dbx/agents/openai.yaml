@@ -1,7 +1,7 @@
 interface:
-  display_name: "DBX CLI"
-  short_description: "Use dbx for MySQL and Redis access"
-  default_prompt: "Use $dbx to inspect or query MySQL and Redis through the local dbx CLI."
+  display_name: "DBX 数据库 CLI"
+  short_description: "使用 dbx profile 访问 MySQL 和 Redis"
+  default_prompt: "使用 $dbx 查看 profile、检测连通性，并通过本地 dbx CLI 执行 MySQL 或 Redis 命令。"
 
 policy:
   allow_implicit_invocation: true

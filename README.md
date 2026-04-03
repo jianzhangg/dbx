@@ -1,32 +1,33 @@
 # dbx
 
-`dbx` 是一个 Node 18 CLI，用一份 YAML profile 同时管理 MySQL 和 Redis 访问。它的目标是替代散落的 MCP，改成 Codex 直接调用本地 CLI。
+`dbx` 是一个面向 MySQL 和 Redis 的本地 CLI。
 
-当前版本特性：
-- MySQL 和 Redis 共用一套 profile 配置
-- `readonly: true | false`
-- `timeout` 秒级超时控制，默认 `30`
-- 所有结果默认输出 JSON
-- 仓库内附带 Codex skill，可直接教 Codex 使用 `dbx`
+它用一份 YAML profile 管理连接信息，把数据库访问收口成几条稳定命令：
 
-## 安装
+- `dbx profile list`
+- `dbx ping <profile>`
+- `dbx sql <profile> "<sql>"`
+- `dbx redis <profile> <command> [args...]`
 
-从源码运行：
+这个工具适合给人直接用，也适合给 Codex 调用。它默认输出 JSON，并内置两类保护：
 
-```bash
-npm install
-npm run build
-node dist/index.js --help
-```
+- `readonly`: 限制只读 profile 不能写库
+- `timeout`: 超时自动断开，避免命令挂住
 
-如果从 npm 安装：
+## 5 分钟上手
+
+安装：
 
 ```bash
 npm install -g dbx-cli
 dbx --help
 ```
 
-## 配置
+初始化配置文件：
+
+```bash
+dbx config
+```
 
 默认配置路径：
 
@@ -35,17 +36,41 @@ macOS / Linux: ~/.config/dbx/profiles.yml
 Windows: %APPDATA%\dbx\profiles.yml
 ```
 
-首次运行 `dbx config` 时，如果这个文件不存在，`dbx` 会自动创建目录并把模板写进去。
+如果你想用别的路径：
 
-也支持覆盖：
-- `DBX_CONFIG=/absolute/path/to/profiles.yml`
-- `dbx --config /absolute/path/to/profiles.yml ...`
+```bash
+DBX_CONFIG=/absolute/path/to/profiles.yml dbx profile list
+dbx --config /absolute/path/to/profiles.yml profile list
+```
 
-示例配置见 [`profiles.example.yml`](./profiles.example.yml)。
+先看有哪些 profile：
+
+```bash
+dbx profile list
+dbx profile show prod_mysql_ro
+```
+
+连通性检查：
+
+```bash
+dbx ping prod_mysql_ro
+dbx ping cache_redis_ro
+```
+
+开始查询：
+
+```bash
+dbx sql prod_mysql_ro "select now() as now_time"
+dbx redis cache_redis_ro GET session:1
+```
+
+## 配置文件怎么写
+
+推荐把只读和可写 profile 分开，不要混用：
 
 ```yaml
 profiles:
-  prod_mysql:
+  prod_mysql_ro:
     kind: mysql
     host: 127.0.0.1
     port: 3306
@@ -55,111 +80,176 @@ profiles:
     readonly: true
     timeout: 30
 
-  cache_redis:
+  prod_mysql_rw:
+    kind: mysql
+    host: 127.0.0.1
+    port: 3306
+    user: app_user
+    password: secret
+    database: app
+    readonly: false
+    timeout: 30
+
+  cache_redis_ro:
     kind: redis
     url: redis://default:secret@127.0.0.1:6379/0
     readonly: true
     timeout: 30
+
+  cache_redis_rw:
+    kind: redis
+    url: redis://default:secret@127.0.0.1:6379/0
+    readonly: false
+    timeout: 30
 ```
 
 字段说明：
-- `kind`: `mysql` 或 `redis`
-- `readonly`: 是否启用只读保护
-- `timeout`: 超时秒数，默认 `30`
 
-## 命令
+- `kind`: `mysql` 或 `redis`
+- `readonly`: `true` 表示启用只读保护，`false` 表示允许写
+- `timeout`: 秒级超时，默认 `30`
+
+如果只想从只读 profile 开始，先只配 `*_ro` 即可。
+
+## 命令怎么用
+
+### `dbx config`
+
+显示当前使用的配置文件路径；如果文件不存在，会自动创建模板。
 
 ```bash
 dbx config
-dbx profile list
-dbx profile show prod_mysql
-dbx ping prod_mysql
-dbx sql prod_mysql "select now()"
-dbx redis cache_redis GET session:1
 ```
 
-`dbx config` 会返回：
-- `configPath`: 当前使用的配置文件路径
-- `created`: 本次是否刚创建了配置文件
-- `templatePath`: 当前包内模板路径
-- `howToConfigure`: 修改配置文件的简短说明
+### `dbx profile list`
 
-常见返回：
+列出所有 profile，只展示安全字段。
+
+```bash
+dbx profile list
+```
+
+### `dbx profile show <profile>`
+
+查看某个 profile 的完整配置，敏感信息会被脱敏。
+
+```bash
+dbx profile show prod_mysql_ro
+dbx profile show cache_redis_ro
+```
+
+### `dbx ping <profile>`
+
+先用这个命令确认 profile 能连通。
+
+```bash
+dbx ping prod_mysql_ro
+dbx ping cache_redis_ro
+```
+
+### `dbx sql <profile> "<sql>"`
+
+执行一条 MySQL SQL。每次只能发一条语句。
+
+```bash
+dbx sql prod_mysql_ro "select id, name from users limit 10"
+dbx sql prod_mysql_rw "insert into audit_log(action) values ('manual-check')"
+```
+
+### `dbx redis <profile> <command> [args...]`
+
+执行一条 Redis 命令。
+
+```bash
+dbx redis cache_redis_ro GET session:1
+dbx redis cache_redis_ro MGET session:1 session:2
+dbx redis cache_redis_rw SET feature:flag on
+```
+
+## 输出长什么样
+
+所有结果默认输出 JSON。
+
+成功示例：
 
 ```json
 {
   "ok": true,
-  "profile": "prod_mysql",
+  "profile": "prod_mysql_ro",
   "kind": "mysql",
   "readonly": true,
-  "data": {}
+  "data": {
+    "rows": [
+      {
+        "id": 1,
+        "name": "alice"
+      }
+    ]
+  }
 }
 ```
 
-错误返回：
+失败示例：
 
 ```json
 {
   "ok": false,
-  "profile": "prod_mysql",
-  "kind": "mysql",
+  "profile": "cache_redis_ro",
+  "kind": "redis",
   "readonly": true,
   "error": {
     "code": "READONLY_BLOCKED",
-    "message": "Only SELECT/SHOW/DESC/DESCRIBE/EXPLAIN/WITH statements are allowed when readonly=true"
+    "message": "SET is not allowed when readonly=true"
   }
 }
 ```
 
 失败返回固定包含：
-- `error.code`: 稳定的错误类别
-- `error.message`: 可直接展示或记录的具体失败信息
-- `error.details`: 可选的结构化补充信息，当前主要用于配置/schema 校验错误
+
+- `error.code`: 稳定错误码
+- `error.message`: 可直接展示的错误信息
+- `error.details`: 结构化补充信息，当前主要用于配置校验失败
 
 退出码：
-- `0` 成功
-- `2` 参数或配置错误
-- `3` 被 `readonly` 拦截
-- `4` 超时
-- `5` 执行失败
-- `6` profile 不存在
 
-## Readonly 规则
+- `0`: 成功
+- `2`: 参数或配置错误
+- `3`: 被 `readonly` 拦截
+- `4`: 超时
+- `5`: 执行失败
+- `6`: profile 不存在
 
-MySQL:
-- `readonly: true` 时只允许以 `SELECT`、`SHOW`、`DESC`、`DESCRIBE`、`EXPLAIN`、`WITH` 开头的单条 SQL
-- 同时包在 `START TRANSACTION READ ONLY` 中执行
-- `readonly: false` 时允许任意单条 SQL
+## 只读规则
 
-Redis:
+MySQL：
+
+- `readonly: true` 时只允许 `SELECT`、`SHOW`、`DESC`、`DESCRIBE`、`EXPLAIN`、`WITH`
+- 只允许一条 SQL
+- 执行时会包在 `START TRANSACTION READ ONLY` 中
+
+Redis：
+
 - `readonly: true` 时只允许内置只读命令集合
-- `readonly: false` 时允许任意单条 Redis 命令
+- `GET`、`MGET`、`HGETALL`、`SMEMBERS`、`ZRANGE`、`LRANGE`、`TTL`、`PING` 等可用
+- `SET`、`DEL`、`HSET`、`LPUSH` 这类写命令会直接被拦截
 
-`readonly` 的目标是阻止修改持久数据，不负责限制慢查询；慢查询由 `timeout` 控制。
+建议：
 
-## 测试
+- 日常排查默认使用 `*_ro`
+- 真要写入时显式切到 `*_rw`
+- 不要把“读写混合”的权限放在同一个 profile 里
 
-```bash
-npm test
-```
+## 给 Codex 用
 
-仓库内也已经用本地 Docker + Colima 实际验证过：
-- MySQL 只读查询成功
-- MySQL 写操作在 `readonly: true` 下被拦截
-- Redis 只读命令成功
-- Redis 写命令在 `readonly: true` 下被拦截
-- `readonly: false` 下允许真实写入
-
-## Codex Skill
-
-仓库内包含 skill：
+仓库里自带 skill：
 
 ```text
 skills/dbx
 ```
 
-用途：
-- 先让 Codex 跑 `dbx profile list`
-- 再按 profile 类型选择 `dbx sql ...` 或 `dbx redis ...`
+这个 skill 会引导 Codex：
+
+- 先跑 `dbx profile list`
+- 按 profile 类型决定走 `dbx sql` 还是 `dbx redis`
 - 默认消费 JSON 输出
-- 遇到 `READONLY_BLOCKED` 直接停止，不绕过保护
+- 遇到 `READONLY_BLOCKED` 直接停止，不尝试绕过
