@@ -16,14 +16,25 @@
 
 ## 5 分钟上手
 
-安装：
+1. 安装 CLI：
 
 ```bash
 npm install -g dbx-cli
 dbx --help
 ```
 
-初始化配置文件：
+2. 如果你要给 Codex 用，把 skill 安装到 Codex 全局目录。
+
+以默认全局目录 `~/.codex/skills` 为例：
+
+```bash
+mkdir -p ~/.codex/skills
+cp -R "$(npm root -g)/dbx-cli/skills/dbx" ~/.codex/skills/dbx
+```
+
+如果你用的是自定义 `CODEX_HOME`，把目标目录换成 `$CODEX_HOME/skills/dbx` 即可。
+
+3. 初始化配置文件：
 
 ```bash
 dbx config
@@ -277,15 +288,31 @@ Redis：
 
 ## 给 Codex 用
 
-仓库里自带 skill：
+如果你希望 Codex 能直接调用 `dbx`，除了安装 npm 包，还需要把这个 skill 放进 Codex 的 skills 目录。
 
-```text
-skills/dbx
+以 Codex 默认全局目录 `~/.codex/skills` 为例：
+
+```bash
+mkdir -p ~/.codex/skills
+cp -R "$(npm root -g)/dbx-cli/skills/dbx" ~/.codex/skills/dbx
 ```
 
-这个 skill 会引导 Codex：
+如果你使用自定义 `CODEX_HOME`，对应目录就是：
 
-- 先跑 `dbx profile list`
-- 按 profile 类型决定走 `dbx sql` 还是 `dbx redis`
-- 默认消费 JSON 输出
+```bash
+$CODEX_HOME/skills/dbx
+```
+
+装好以后，可以在 Codex 里直接这样说：
+
+- `使用 $dbx 列出当前可用的 profile`
+- `使用 $dbx ping mysql_test`
+- `使用 $dbx 查看 redis_test 里某个 key 的 TTL`
+- `使用 $dbx 查 prod_mysql_ro 最近 10 条订单`
+
+这个 skill 默认会引导 Codex：
+
+- 已知 profile 和目标时直接执行 `dbx`
+- 只有在 profile 不明确或连通性可疑时才补 `profile list`、`profile show`、`ping`
+- 按场景选择 `dbx sql` 或 `dbx redis`
 - 遇到 `READONLY_BLOCKED` 直接停止，不尝试绕过

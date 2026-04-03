@@ -1,7 +1,7 @@
 interface:
-  display_name: "DBX 数据库 CLI"
-  short_description: "使用 dbx profile 访问 MySQL 和 Redis"
-  default_prompt: "使用 $dbx 查看 profile、检测连通性，并通过本地 dbx CLI 执行 MySQL 或 Redis 命令。"
+  display_name: "DBX 数据查询"
+  short_description: "按 profile 直接做 MySQL/Redis 探活与只读查询"
+  default_prompt: "使用 $dbx 按 profile 直接完成探活、只读 MySQL 查询或 Redis 键检查。已知 profile 就直接执行，只有在 profile 不明确或连通性可疑时才补 profile list、profile show 或 ping。"
 
 policy:
   allow_implicit_invocation: true
