@@ -2,11 +2,13 @@ import mysql from "mysql2/promise";
 import type { FieldPacket } from "mysql2/promise";
 import type { MysqlProfile } from "./config.js";
 import { DbxError, ExitCode } from "./errors.js";
-import { withTimeout } from "./utils.js";
+import { formatTimeoutMessage, withTimeout } from "./utils.js";
 
 const ALLOWED_START = /^\s*(select|show|desc|describe|explain|with)\b/i;
 const FORBIDDEN_KEYWORDS =
   /\b(insert|update|delete|drop|alter|create|replace|truncate|grant|revoke|set|use|load|call|commit|rollback|begin|start\s+transaction|lock|unlock|rename)\b/i;
+const MYSQL_QUERY_TIMEOUT_ERRNO = 3024;
+const MYSQL_QUERY_TIMEOUT_CODE = "ER_QUERY_TIMEOUT";
 
 export function countSqlStatements(sql: string): number {
   let count = 0;
@@ -98,6 +100,27 @@ export function validateReadonlySql(sql: string): string | undefined {
   return undefined;
 }
 
+export function isMysqlExecutionTimeoutError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const mysqlError = error as {
+    code?: unknown;
+    errno?: unknown;
+    message?: unknown;
+  };
+
+  if (mysqlError.code === MYSQL_QUERY_TIMEOUT_CODE || mysqlError.errno === MYSQL_QUERY_TIMEOUT_ERRNO) {
+    return true;
+  }
+
+  return (
+    typeof mysqlError.message === "string" &&
+    /maximum statement execution time exceeded/i.test(mysqlError.message)
+  );
+}
+
 function normalizeFields(fields: FieldPacket[] | undefined): Array<Record<string, unknown>> {
   if (!Array.isArray(fields)) {
     return [];
@@ -141,6 +164,8 @@ export async function runSql(profile: MysqlProfile, sql: string): Promise<Record
           multipleStatements: false
         });
 
+        await connection.query(`SET SESSION max_execution_time = ${timeoutMs}`);
+
         if (profile.readonly) {
           await connection.query("START TRANSACTION READ ONLY");
         }
@@ -175,6 +200,9 @@ export async function runSql(profile: MysqlProfile, sql: string): Promise<Record
   } catch (error) {
     if (error instanceof DbxError) {
       throw error;
+    }
+    if (isMysqlExecutionTimeoutError(error)) {
+      throw new DbxError("TIMEOUT", formatTimeoutMessage(timeoutMs), ExitCode.Timeout);
     }
     const message = error instanceof Error ? error.message : String(error);
     throw new DbxError("EXECUTION_FAILED", `MySQL query failed: ${message}`, ExitCode.ExecutionFailed);

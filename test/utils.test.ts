@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DbxError } from "../src/errors.js";
-import { expandPath, withTimeout } from "../src/utils.js";
+import { expandPath, formatTimeoutMessage, withTimeout } from "../src/utils.js";
 
 test("withTimeout returns the operation result before the deadline", async () => {
   const result = await withTimeout(async () => "ok", 100);
@@ -25,7 +25,7 @@ test("withTimeout rejects with a timeout error and runs cleanup", async () => {
     (error: unknown) => {
       assert.ok(error instanceof DbxError);
       assert.equal(error.code, "TIMEOUT");
-      assert.equal(error.message, "Operation timed out after 1s");
+      assert.equal(error.message, formatTimeoutMessage(5));
       return true;
     }
   );
@@ -57,4 +57,9 @@ test("expandPath resolves home and relative paths", () => {
       process.env.USERPROFILE = userProfile;
     }
   }
+});
+
+test("formatTimeoutMessage rounds milliseconds up to whole seconds", () => {
+  assert.equal(formatTimeoutMessage(5), "Operation timed out after 1s");
+  assert.equal(formatTimeoutMessage(1001), "Operation timed out after 2s");
 });

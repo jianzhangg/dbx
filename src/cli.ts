@@ -63,7 +63,7 @@ function createConfigCommand(program: Command): void {
             "Open the config file and replace the placeholder connection values.",
             "Use kind=mysql or kind=redis for each profile.",
             "Set readonly to true or false for each profile.",
-            "Set timeout to the number of seconds before dbx disconnects."
+            "Set timeout to the number of seconds before dbx times out the operation."
           ]
         };
       });

@@ -10,6 +10,7 @@ CONFIG_PATH="$(mktemp /tmp/dbx-docker.XXXXXX.yml)"
 DBX=(node "$REPO_ROOT/dist/index.js")
 MYSQL_CONTAINER="${COMPOSE_PROJECT}-mysql"
 REDIS_CONTAINER="${COMPOSE_PROJECT}-redis"
+MYSQL_TARGET=""
 DOCKER_MODE="plain"
 COMPOSE=()
 
@@ -53,6 +54,60 @@ run_capture() {
   printf -v "$__status_var" "%s" "$status"
 }
 
+mysql_exec() {
+  local sql="$1"
+  docker exec "$MYSQL_TARGET" env MYSQL_PWD=rootpwd mysql -uroot -D app -N -s -e "$sql"
+}
+
+count_processlist_query() {
+  local sql="$1"
+  mysql_exec "SELECT COUNT(*) FROM information_schema.processlist WHERE INFO = '$sql'"
+}
+
+wait_for_query_presence() {
+  local sql="$1"
+
+  for _ in $(seq 1 50); do
+    if [[ "$(count_processlist_query "$sql")" -gt 0 ]]; then
+      return
+    fi
+    sleep 0.1
+  done
+
+  echo "[FAIL] query did not appear in processlist: $sql"
+  exit 1
+}
+
+wait_for_query_absence() {
+  local sql="$1"
+
+  for _ in $(seq 1 60); do
+    if [[ "$(count_processlist_query "$sql")" -eq 0 ]]; then
+      return
+    fi
+    sleep 0.1
+  done
+
+  echo "[FAIL] query did not disappear from processlist in time: $sql"
+  exit 1
+}
+
+wait_for_pid_exit() {
+  local pid="$1"
+  local label="$2"
+
+  for _ in $(seq 1 50); do
+    if ! kill -0 "$pid" >/dev/null 2>&1; then
+      return
+    fi
+    sleep 0.1
+  done
+
+  echo "[FAIL] $label process did not exit in time"
+  kill -9 "$pid" >/dev/null 2>&1 || true
+  exit 1
+}
+
 detect_docker_mode() {
   if docker compose version >/dev/null 2>&1; then
     DOCKER_MODE="compose"
@@ -91,7 +146,8 @@ start_services() {
   if [[ "$DOCKER_MODE" == "compose" ]]; then
     "${COMPOSE[@]}" down -v >/dev/null 2>&1 || true
     "${COMPOSE[@]}" up -d >/dev/null
-    wait_for_health "$("${COMPOSE[@]}" ps -q mysql)" "mysql"
+    MYSQL_TARGET="$("${COMPOSE[@]}" ps -q mysql)"
+    wait_for_health "$MYSQL_TARGET" "mysql"
     wait_for_health "$("${COMPOSE[@]}" ps -q redis)" "redis"
     return
   fi
@@ -120,6 +176,7 @@ start_services() {
     --health-start-period 5s \
     redis:7-alpine >/dev/null
 
+  MYSQL_TARGET="$MYSQL_CONTAINER"
   wait_for_health "$MYSQL_CONTAINER" "mysql"
   wait_for_health "$REDIS_CONTAINER" "redis"
 }
@@ -155,6 +212,26 @@ profiles:
     database: app
     readonly: true
     timeout: 10
+
+  mysql_timeout:
+    kind: mysql
+    host: 127.0.0.1
+    port: 13307
+    user: root
+    password: rootpwd
+    database: app
+    readonly: true
+    timeout: 1
+
+  mysql_timeout_process:
+    kind: mysql
+    host: 127.0.0.1
+    port: 13307
+    user: root
+    password: rootpwd
+    database: app
+    readonly: true
+    timeout: 2
 
   mysql_rw:
     kind: mysql
@@ -210,6 +287,59 @@ fi
 assert_contains "$redis_ping_output" '"result": "PONG"' "redis ping should succeed"
 
 echo "[5/6] Verifying MySQL and Redis read/write behavior"
+run_capture mysql_timeout_var_output mysql_timeout_var_status --config "$CONFIG_PATH" sql mysql_timeout "SELECT @@max_execution_time AS timeout_ms"
+if [[ "$mysql_timeout_var_status" -ne 0 ]]; then
+  echo "$mysql_timeout_var_output"
+  exit "$mysql_timeout_var_status"
+fi
+assert_contains "$mysql_timeout_var_output" '"timeout_ms": 1000' "mysql timeout profile should set session max_execution_time"
+
+run_capture mysql_timeout_output mysql_timeout_status --config "$CONFIG_PATH" sql mysql_timeout "SELECT SLEEP(2) AS slept"
+if [[ "$mysql_timeout_status" -ne 4 ]]; then
+  echo "$mysql_timeout_output"
+  exit 1
+fi
+assert_contains "$mysql_timeout_output" '"code": "TIMEOUT"' "mysql slow query should timeout"
+
+run_capture mysql_timeout_cte_output mysql_timeout_cte_status --config "$CONFIG_PATH" sql mysql_timeout "WITH timeout_cte AS (SELECT SLEEP(2) AS slept) SELECT slept FROM timeout_cte"
+if [[ "$mysql_timeout_cte_status" -ne 4 ]]; then
+  echo "$mysql_timeout_cte_output"
+  exit 1
+fi
+assert_contains "$mysql_timeout_cte_output" '"code": "TIMEOUT"' "mysql CTE query should timeout"
+
+kill_query_sql="SELECT /* dbx_timeout_kill */ SLEEP(10) AS slept"
+kill_query_output="$(mktemp /tmp/dbx-kill-output.XXXXXX)"
+"${DBX[@]}" --config "$CONFIG_PATH" sql mysql_timeout_process "$kill_query_sql" >"$kill_query_output" 2>&1 &
+kill_query_pid=$!
+wait_for_query_presence "$kill_query_sql"
+kill -9 "$kill_query_pid" >/dev/null 2>&1 || true
+wait_for_query_absence "$kill_query_sql"
+set +e
+wait "$kill_query_pid" 2>/dev/null
+set -e
+rm -f "$kill_query_output"
+
+hang_query_sql="SELECT /* dbx_timeout_stop */ SLEEP(10) AS slept"
+hang_query_output="$(mktemp /tmp/dbx-stop-output.XXXXXX)"
+"${DBX[@]}" --config "$CONFIG_PATH" sql mysql_timeout_process "$hang_query_sql" >"$hang_query_output" 2>&1 &
+hang_query_pid=$!
+wait_for_query_presence "$hang_query_sql"
+kill -STOP "$hang_query_pid" >/dev/null 2>&1 || true
+wait_for_query_absence "$hang_query_sql"
+kill -CONT "$hang_query_pid" >/dev/null 2>&1 || true
+wait_for_pid_exit "$hang_query_pid" "stopped dbx"
+set +e
+wait "$hang_query_pid" 2>/dev/null
+hang_query_status=$?
+set -e
+if [[ "$hang_query_status" -ne 4 ]]; then
+  cat "$hang_query_output"
+  exit 1
+fi
+assert_contains "$(cat "$hang_query_output")" '"code": "TIMEOUT"' "stopped dbx query should still time out"
+rm -f "$hang_query_output"
+
 run_capture drop_output drop_status --config "$CONFIG_PATH" sql mysql_rw "DROP TABLE IF EXISTS dbx_cli_test"
 if [[ "$drop_status" -ne 0 ]]; then
   echo "$drop_output"

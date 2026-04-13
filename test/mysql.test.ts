@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { countSqlStatements, validateReadonlySql } from "../src/mysql.js";
+import {
+  countSqlStatements,
+  isMysqlExecutionTimeoutError,
+  validateReadonlySql
+} from "../src/mysql.js";
 
 test("countSqlStatements allows trailing semicolon", () => {
   assert.equal(countSqlStatements("select 1;"), 1);
@@ -38,4 +42,17 @@ test("validateReadonlySql blocks writes and ddl", () => {
 test("validateReadonlySql blocks transaction control statements", () => {
   assert.notEqual(validateReadonlySql("begin"), undefined);
   assert.notEqual(validateReadonlySql("set autocommit = 0"), undefined);
+});
+
+test("isMysqlExecutionTimeoutError matches mysql timeout errors", () => {
+  assert.equal(isMysqlExecutionTimeoutError({ code: "ER_QUERY_TIMEOUT" }), true);
+  assert.equal(isMysqlExecutionTimeoutError({ errno: 3024 }), true);
+  assert.equal(
+    isMysqlExecutionTimeoutError({
+      message: "Query execution was interrupted, maximum statement execution time exceeded"
+    }),
+    true
+  );
+  assert.equal(isMysqlExecutionTimeoutError({ code: "ER_PARSE_ERROR" }), false);
+  assert.equal(isMysqlExecutionTimeoutError(new Error("plain failure")), false);
 });

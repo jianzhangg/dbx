@@ -12,7 +12,7 @@
 默认输出 JSON，并内置两类保护：
 
 - `readonly`: 只读 profile 下阻止写操作
-- `timeout`: 超时自动断开，避免命令挂住
+- `timeout`: MySQL 查询会下沉到 session `max_execution_time`，CLI 侧仍会超时返回
 
 ## 5 分钟上手
 
@@ -118,6 +118,12 @@ cp -R "$(npm root -g)/dbx-cli/skills/dbx" ~/.codex/skills/dbx
 - `kind`: `mysql` 或 `redis`
 - `readonly`: `true` 表示启用只读保护，`false` 表示允许写
 - `timeout`: 秒级超时，默认 `30`
+
+MySQL 补充说明：
+
+- `dbx` 会把 `timeout` 转成毫秒并设置到当前连接的 session `max_execution_time`
+- 这个限制由 MySQL 服务端执行，主要作用于 `SELECT` / `WITH` 这类只读查询
+- CLI 侧仍保留本地超时兜底
 
 如果你只想从安全用法开始，先只配置 `*_ro` 即可。
 

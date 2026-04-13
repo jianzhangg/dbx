@@ -2,6 +2,10 @@ import os from "node:os";
 import path from "node:path";
 import { DbxError, ExitCode } from "./errors.js";
 
+export function formatTimeoutMessage(timeoutMs: number): string {
+  return `Operation timed out after ${Math.ceil(timeoutMs / 1000)}s`;
+}
+
 export async function withTimeout<T>(
   operation: () => Promise<T>,
   timeoutMs: number,
@@ -22,7 +26,7 @@ export async function withTimeout<T>(
         reject(
           new DbxError(
             "TIMEOUT",
-            `Operation timed out after ${Math.ceil(timeoutMs / 1000)}s`,
+            formatTimeoutMessage(timeoutMs),
             ExitCode.Timeout
           )
         );
