@@ -96,8 +96,9 @@ dbx redis cache_redis_ro GET session:1
 以默认目录 `~/.codex/skills` 为例：
 
 ```bash
+PACKAGE_NAME="dbx-cli"
 mkdir -p ~/.codex/skills
-cp -R "$(npm root -g)/dbx-cli/skills/dbx" ~/.codex/skills/dbx
+cp -R "$(npm root -g)/${PACKAGE_NAME}/skills/dbx" ~/.codex/skills/dbx
 ```
 
 如果你使用自定义 `CODEX_HOME`，目标目录就是 `$CODEX_HOME/skills/dbx`。

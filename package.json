@@ -6,7 +6,7 @@
   "homepage": "https://example.com/dbx#readme",
   "repository": {
     "type": "git",
-    "url": "git+ssh://git.com/your-org/dbx.git"
+    "url": "git+ssh://git@example.com/your-org/dbx.git"
   },
   "bugs": {
     "url": "https://example.com/dbx/issues"
